@@ -5,41 +5,58 @@ const cors = require("cors");
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.send("🚀 Speak Up Live Server Running");
+});
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
 
-const users = {}; // socketId -> username
+let users = {};
 
 io.on("connection", (socket) => {
   console.log("🟢 User connected:", socket.id);
 
-  // تسجيل اليوزر
   socket.on("join", (username) => {
-    users[socket.id] = username;
+    users[socket.id] = {
+      id: socket.id,
+      username,
+    };
+
     io.emit("online-users", Object.values(users));
   });
 
-  // استقبال الرسائل
   socket.on("send-message", (data) => {
-    io.emit("receive-message", data);
+    const user = users[socket.id];
+    if (!user) return;
+
+    const messageData = {
+      id: socket.id,
+      username: user.username,
+      message: data.message,
+      time: new Date().toLocaleTimeString(),
+    };
+
+    io.emit("receive-message", messageData);
   });
 
-  // عند الخروج
   socket.on("disconnect", () => {
     console.log("🔴 User disconnected:", socket.id);
     delete users[socket.id];
     io.emit("online-users", Object.values(users));
   });
 });
+
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-  console.log("🚀 Server running on port " + PORT);
+  console.log("🔥 Server running on port " + PORT);
 });
