@@ -1,15 +1,17 @@
 const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
 const cors = require("cors");
+const { Server } = require("socket.io");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("🚀 Speak Up Live Server Running");
-});
+// CORS باش يخدم مع Vercel
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST"],
+  })
+);
 
 const server = http.createServer(app);
 
@@ -20,43 +22,40 @@ const io = new Server(server, {
   },
 });
 
-let users = {};
+// Route اختبار
+app.get("/", (req, res) => {
+  res.send("SpeakUp Live Server is running 🚀");
+});
 
+// تخزين آخر رسالة لكل مستخدم (anti-spam)
+const lastMessageTime = {};
+
+// Socket
 io.on("connection", (socket) => {
-  console.log("🟢 User connected:", socket.id);
-
-  socket.on("join", (username) => {
-    users[socket.id] = {
-      id: socket.id,
-      username,
-    };
-
-    io.emit("online-users", Object.values(users));
-  });
+  console.log("User connected:", socket.id);
 
   socket.on("send-message", (data) => {
-    const user = users[socket.id];
-    if (!user) return;
+    const now = Date.now();
 
-    const messageData = {
-      id: socket.id,
-      username: user.username,
-      message: data.message,
-      time: new Date().toLocaleTimeString(),
-    };
-
-    io.emit("receive-message", messageData);
+    // منع السبام (رسالة كل 1 ثانية)
+    if (
+      !lastMessageTime[socket.id] ||
+      now - lastMessageTime[socket.id] > 1000
+    ) {
+      io.emit("receive-message", data);
+      lastMessageTime[socket.id] = now;
+    }
   });
 
   socket.on("disconnect", () => {
-    console.log("🔴 User disconnected:", socket.id);
-    delete users[socket.id];
-    io.emit("online-users", Object.values(users));
+    console.log("User disconnected:", socket.id);
+    delete lastMessageTime[socket.id];
   });
 });
 
+// مهم ل Render
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-  console.log("🔥 Server running on port " + PORT);
+  console.log(`Server running on port ${PORT}`);
 });
